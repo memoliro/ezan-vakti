@@ -45,6 +45,8 @@ const I18N = {
     mapBody: "Drag the map. The curve is the great-circle path to the Kaaba, and it redraws from the center.",
     quranTitle: "Quran", play: "Play", pause: "Pause", tasbihTitle: "Tasbih", tap: "Tap to count", reset: "Reset",
     trackerTitle: "Today's prayers", streak: "day streak", streaks: "day streak", done: "done", markDone: "Tap a prayer to mark it done",
+    cardHint: "Tap the ✓ on a card once you've prayed it",
+    congrats: "Congratulations! May Allah accept your prayers.",
     ramadanHub: "Ramadan", suhoorIn: "Suhoor in", iftarIn: "Iftar in", suhoorDone: "Suhoor passed", fasting: "Fasting now",
     mosquesTab: "Find", mosquesTitle: "Find nearby", mosquesSub: "Mosques and halal restaurants near you, from OpenStreetMap.",
     mosquesFind: "Find mosques near me", mosquesLoading: "Searching…", mosquesNone: "No mosques found within 10 km.", mosquesError: "Could not load mosques.",
@@ -113,6 +115,8 @@ const I18N = {
     mapBody: "Haritayı kaydırın. Eğri, Kâbe’ye giden büyük daire yoludur ve merkezden yeniden çizilir.",
     quranTitle: "Kur'an", play: "Oynat", pause: "Durdur", tasbihTitle: "Tesbih", tap: "Saymak için dokun", reset: "Sıfırla",
     trackerTitle: "Bugünkü namazlar", streak: "günlük seri", streaks: "günlük seri", done: "tamam", markDone: "Tamamlanan namaza dokun",
+    cardHint: "Kıldığınız namazın kartındaki ✓'ye dokunun",
+    congrats: "Tebrikler! Allah ibadetlerinizi kabul etsin.",
     ramadanHub: "Ramazan", suhoorIn: "Sahura", iftarIn: "İftara", suhoorDone: "Sahur geçti", fasting: "Oruçlusun",
     mosquesTab: "Bul", mosquesTitle: "Yakında bul", mosquesSub: "Yakındaki camiler ve helal restoranlar, OpenStreetMap'ten.",
     mosquesFind: "Yakınımdaki camileri bul", mosquesLoading: "Aranıyor…", mosquesNone: "10 km içinde cami bulunamadı.", mosquesError: "Camiler yüklenemedi.",
@@ -432,7 +436,16 @@ function renderTimes() {
   document.getElementById("kerahat").textContent = kerahat ? t("kerahat") : "";
   document.getElementById("vaktGrid").innerHTML = PRAYERS.map(k => {
     const tm = entry.timings[k];
-    return `<article class="vakt ${k === nextKey ? "on" : ""}"><div class="nm">${nameOf(k)}</div><div class="tm">${tm}</div><div class="st">${minutes(tm) <= nowMin ? t("passed") : ""}</div></article>`;
+    const passed = minutes(tm) <= nowMin;
+    const trk = getTracker(), done = trk[todayKey()] || [];
+    const trackable = TRACKABLE.includes(k), isDone = done.includes(k);
+    let check = "";
+    if (trackable) {
+      if (isDone) check = `<button type="button" class="vakt-check on" data-trk="${k}" aria-label="${nameOf(k)} ${t("done")}">✓</button>`;
+      else if (passed) check = `<button type="button" class="vakt-check" data-trk="${k}" aria-label="${t("markDone")} ${nameOf(k)}"></button>`;
+      else check = `<span class="vakt-check off" aria-hidden="true"></span>`;
+    }
+    return `<article class="vakt ${k === nextKey ? "on" : ""}">${check}<div class="nm">${nameOf(k)}</div><div class="tm">${tm}</div><div class="st">${passed ? t("passed") : ""}</div></article>`;
   }).join("");
   renderRamadanHub(entry);
   // Adhan at prayer time: when a prayer moment arrives, play the full adhan once
@@ -680,6 +693,7 @@ function togglePrayer(key) {
   if (i >= 0) tr[tk].splice(i, 1); else tr[tk].push(key);
   saveTracker(tr);
   renderTracker();
+  renderTimes(); // refresh the card checkboxes immediately
 }
 function streakDays() {
   const tr = getTracker();
@@ -699,14 +713,12 @@ function renderTracker() {
   const box = document.getElementById("trackerBox");
   if (!box) return;
   const n = streakDays();
+  const allDone = TRACKABLE.every(k => done.includes(k));
   box.innerHTML =
-    `<div class="tracker-head"><span>${t("trackerTitle")}</span>` +
-    (n > 0 ? `<span class="streak">🔥 ${n} ${t(n === 1 ? "streak" : "streaks")}</span>` : "") +
-    `</div><div class="tracker-hint">${t("markDone")}</div>` +
-    `<div class="tracker-grid">` + TRACKABLE.map(k =>
-      `<button type="button" class="trk ${done.includes(k) ? "on" : ""}" data-p="${k}">${done.includes(k) ? "✓ " : ""}${nameOf(k)}</button>`
-    ).join("") + `</div>`;
-  box.querySelectorAll(".trk").forEach(b => b.addEventListener("click", () => togglePrayer(b.dataset.p)));
+    `<div class="tracker-head">` +
+    (n > 0 ? `<span class="streak">🔥 ${n} ${t(n === 1 ? "streak" : "streaks")}</span>` : `<span>${t("trackerTitle")}</span>`) +
+    `</div>` +
+    (allDone ? `<div class="tracker-congrats">🎉 ${t("congrats")}</div>` : `<div class="tracker-hint">${t("cardHint")}</div>`);
 }
 /* ---------- nearby mosques (OpenStreetMap / Overpass) ---------- */
 function mosqueDistKm(lat1, lon1, lat2, lon2) {
@@ -1073,4 +1085,10 @@ applyI18n();
 buildCompassDial();
 refresh();
 maybeShowApkNotice();
+// prayer-card checkboxes use delegation (cards re-render every second)
+const vg = document.getElementById("vaktGrid");
+if (vg) vg.addEventListener("click", e => {
+  const b = e.target.closest("[data-trk]");
+  if (b) togglePrayer(b.dataset.trk);
+});
 setInterval(renderTimes, 1000);
