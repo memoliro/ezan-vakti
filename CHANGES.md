@@ -6,3 +6,4 @@ Privacy: Google Fonts and unpkg removed (self-hosted); privacy/terms text correc
 Service worker: no 6 MB audio precache, caches only 200 OK same-origin responses, skips Range requests, qibla page cached.
 Headers: audio no longer `immutable`.
 Added: tests/calc.test.js, qibla.js (extracted inline script), CHANGES.md.
+push-alerts.js: settings re-sync to the push worker is debounced (1.5 s) and skipped when the synced payload is unchanged (it previously fired on every save(), e.g. each tasbih tap, causing a worker + Aladhan request each time).

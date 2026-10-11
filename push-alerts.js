@@ -188,6 +188,7 @@ async function enable() {
       }),
     });
     if (!res.ok) throw new Error('subscribe ' + res.status);
+    lastSynced = JSON.stringify(settingsPayload());
     try { localStorage.setItem('ddh-push', '1'); } catch (e) {}
     if (note) note.textContent = t('pushOn');
     toast(t('pushEnabled'));
@@ -217,13 +218,23 @@ async function disable() {
   }
 }
 
-/* Re-sync settings when user changes location/method/reminders while subscribed. */
-async function resync() {
+/* Re-sync settings when the user changes location/method/reminders while subscribed.
+   save() fires on EVERY state change (even tasbih taps), so: debounce, and skip when the
+   payload the server cares about hasn't actually changed. */
+var lastSynced = '';
+var syncTimer = 0;
+function resync() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(doResync, 1500);
+}
+async function doResync() {
   var sub = await currentSub();
   if (!sub) return;
+  var payload = JSON.stringify(settingsPayload());
+  if (payload === lastSynced) return;
   try {
     var sj = sub.toJSON();
-    await fetch(PUSH_API + '/api/subscribe', {
+    var res = await fetch(PUSH_API + '/api/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -231,6 +242,7 @@ async function resync() {
         settings: settingsPayload(),
       }),
     });
+    if (res.ok) lastSynced = payload;
   } catch (e) {}
 }
 
