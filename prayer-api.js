@@ -36,7 +36,7 @@ const PrayerAPI = (() => {
     return json;
   }
 
-  async function month({ lat, lon, year, month, method = 2, school = 0 }) {
+  async function month({ lat, lon, year, month, method = 2, school = 0, tz = "" }) {
     const key = `ezan-aladhan:${lat.toFixed(3)}:${lon.toFixed(3)}:${year}:${month}:${method}:${school}`;
     const cached = readCache(key);
     if (cached) return cached;
@@ -56,7 +56,7 @@ const PrayerAPI = (() => {
       return payload;
     } catch (e) {
       // Offline fallback: compute locally so the app never shows "could not load times"
-      if (typeof PrayerCalc !== "undefined") return PrayerCalc.month({ lat, lon, year, month, method, school });
+      if (typeof PrayerCalc !== "undefined") return PrayerCalc.month({ lat, lon, year, month, method, school, tz });
       throw e;
     }
   }

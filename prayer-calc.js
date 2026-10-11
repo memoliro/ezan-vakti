@@ -77,26 +77,55 @@ const PrayerCalc = (() => {
     return {
       Fajr: fmt(fajr), Sunrise: fmt(sunrise), Dhuhr: fmt(dhuhr),
       Asr: fmt(asr), Maghrib: fmt(maghrib), Isha: fmt(isha),
-      methodName: m.name + ' (offline calc.)'
     };
   }
 
-  // Whole-month table matching PrayerAPI.month() shape
-  function month({ lat, lon, year, month, method = 13, school = 0 }) {
-    const tzOffset = -new Date(year, month - 1, 15).getTimezoneOffset() / 60;
-    const daysInMonth = new Date(year, month, 0).getDate();
+  // UTC offset (hours) of an IANA zone on a given calendar day, via Intl.
+  // Falls back to the device zone when tz is missing/invalid.
+  function tzOffsetHours(tz, year, month, day) {
+    try {
+      if (tz) {
+        const at = new Date(Date.UTC(year, month - 1, day, 12));
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone: tz, year: 'numeric', month: 'numeric', day: 'numeric',
+          hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23'
+        }).formatToParts(at);
+        const g = {};
+        parts.forEach(p => { if (p.type !== 'literal') g[p.type] = +p.value; });
+        const asUTC = Date.UTC(g.year, g.month - 1, g.day, g.hour, g.minute, g.second);
+        return (asUTC - at.getTime()) / 3600000;
+      }
+    } catch (e) { /* fall through */ }
+    return -new Date(year, month - 1, day, 12).getTimezoneOffset() / 60;
+  }
+
+  const WEEKDAYS_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const GREG_MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  // Whole-month table matching the Aladhan shape that app.js consumes
+  // (date.gregorian.{date,day,weekday,month,year}, date.hijri, timings).
+  function month({ lat, lon, year, month, method = 13, school = 0, tz = '' }) {
+    const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
     const days = [];
     for (let d = 1; d <= daysInMonth; d++) {
+      const tzOffset = tzOffsetHours(tz, year, month, d);
+      const dow = new Date(Date.UTC(year, month - 1, d)).getUTCDay();
       days.push({
         date: {
-          gregorian: { day: d, month, year },
+          gregorian: {
+            date: String(d).padStart(2, '0') + '-' + String(month).padStart(2, '0') + '-' + year,
+            day: String(d),
+            weekday: { en: WEEKDAYS_EN[dow] },
+            month: { number: month, en: GREG_MONTHS_EN[month - 1] },
+            year: String(year)
+          },
           hijri: gToH(year, month, d)
         },
         timings: dayTimes(year, month, d, lat, lon, tzOffset, method, school)
       });
     }
     const m = METHODS[method] || METHODS[13];
-    return { source: 'offline', methodName: m.name + ' (offline calc.)', timezone: '', school: school === 1 ? 'HANAFI' : 'STANDARD', days };
+    return { source: 'offline', methodName: m.name + ' (offline calc.)', timezone: tz || '', school: school === 1 ? 'HANAFI' : 'STANDARD', days };
   }
 
   // Gregorian -> Hijri (standard Kuwaiti algorithm)
@@ -120,5 +149,7 @@ const PrayerCalc = (() => {
     return { day: String(id), month: { number: im, en: HIJRI_MONTHS[im - 1] }, year: String(iy) };
   }
 
-  return { month, dayTimes, METHODS, gToH };
+  return { month, dayTimes, METHODS, gToH, tzOffsetHours };
 })();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = PrayerCalc;

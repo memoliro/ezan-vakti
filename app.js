@@ -1,3 +1,4 @@
+const VALID_SOUNDS = ["adhan-prayer-call.mp3", "adhan-prayer-call-trimmed.mp3", "alarm.mp3", "alert-on-mobile.wav", "bell.wav", "double-car-honk.mp3", "nikin-short-chick-sound.mp3", "nostalgia.wav", "custom"];
 const METHODS = [
   [2, "ISNA (North America)"],
   [13, "Diyanet İşleri Başkanlığı"],
@@ -94,7 +95,8 @@ const I18N = {
     names: { Fajr: "Fajr", Sunrise: "Sunrise", Dhuhr: "Dhuhr", Asr: "Asr", Maghrib: "Maghrib", Isha: "Isha" },
     remaining: "remaining", at: "at", passed: "passed", now: "now",
     kerahat: "Discouraged time — the sun is rising, at its peak, or setting.",
-    qiblaHint: "Kaaba mark sits on the great-circle bearing. Checked against Aladhan.",
+    qiblaHint: "The Kaaba mark sits on the great-circle bearing, measured from true north.",
+    hijriNote: "Calculated Hijri calendar. Local moon sighting may differ by a day.",
     compassUnavailable: "Compass not available on this device — please use the map below.",
     howBody: "The small Kaaba is fixed on the verified bearing. Turn until it meets the gold arrow at the top. Phone compasses are magnetic and can be off by a few degrees near metal.",
     tasbihNote: "33 Subhanallah, 33 Alhamdulillah, 34 Allahu akbar. Saved on this device.",
@@ -164,13 +166,15 @@ const I18N = {
     names: { Fajr: "İmsak", Sunrise: "Güneş", Dhuhr: "Öğle", Asr: "İkindi", Maghrib: "Akşam", Isha: "Yatsı" },
     remaining: "kaldı", at: "saat", passed: "geçti", now: "şimdi",
     kerahat: "Kerahat — güneş doğuyor, tepede, ya da batıyor.",
-    qiblaHint: "Kâbe işareti, büyük daire açısındadır. Aladhan ile doğrulandı.",
+    qiblaHint: "Kâbe işareti, gerçek kuzeye göre büyük daire açısındadır.",
+    hijriNote: "Hesaplanmış Hicri takvim. Yerel hilal gözlemi bir gün farklı olabilir.",
     howBody: "Küçük Kâbe, doğrulanmış açıdadır. Üstteki altın okla buluşana kadar dönün. Telefon pusulası manyetiktir; metal yanında birkaç derece kayabilir.",
     tasbihNote: "33 Sübhanallah, 33 Elhamdülillah, 34 Allahu ekber. Bu cihazda saklanır.",
     focusBody: "Namaz vakitleri, kıble, aylık tablo ve Kur’an okuyucu. Hesap yok, reklam yok, takip yok.",
     footer: "Vakitler Aladhan motorundan. Kur’an metni ve ses Quran.com üzerinden. Yerel cami bir dakika farklı olabilir.",
     loading: "Vakitler yükleniyor…", noResults: "Sonuç yok.", searching: "Aranıyor…", gpsFail: "Konum alınamadı.",
     notified: "Namaz vakti", toward: "Kuzey yukarıda. Kâbe işaretini altın okla hizalayın, ya da pusulayı açın.",
+    compassUnavailable: "Bu cihazda pusula yok — lütfen aşağıdaki haritayı kullanın.",
     left: "sol", right: "sağ", facing: "Kıbleye dönüksünüz.", loadFail: "Vakitler alınamadı.", audioFail: "Ses açılamadı."
   }
 };
@@ -218,8 +222,9 @@ const STATIONS = [
 ];
 
 function load() {
-  const saved = JSON.parse(localStorage.getItem("ezan-vakti") || "{}");
-  return {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem("ezan-vakti") || "{}") || {}; } catch { saved = {}; }
+  const st = {
     lang: saved.lang || (location.pathname.startsWith("/tr") ? "tr" : ((navigator.language || "").toLowerCase().startsWith("tr") ? "tr" : "en")),
     theme: saved.theme || "night",
     method: saved.method ?? 2,
@@ -233,14 +238,23 @@ function load() {
     place: saved.place || { name: "Montreal", country: "Canada", lat: 45.5017, lon: -73.5673, tz: "America/Toronto" },
     tasbih: saved.tasbih || 0
   };
-  // 2026-10-09: beep.wav/chime.wav removed; old names -> bell.wav
-  if (state.sound === "chime" || state.sound === "beep" || state.sound === "bell") state.sound = "bell.wav";
+  // Old/removed sound names (beep, chime, bell, removed files) fall back to bell.wav
+  if (!VALID_SOUNDS.includes(st.sound)) st.sound = "bell.wav";
+  if (st.sound === "custom" && !st.customSound) st.sound = "bell.wav";
+  return st;
 }
 function save() {
-  localStorage.setItem("ezan-vakti", JSON.stringify(state));
+  try { localStorage.setItem("ezan-vakti", JSON.stringify(state)); } catch { /* private mode or quota (e.g. big custom sound) */ }
   if (window.DDHPush && window.DDHPush.resync) {
     try { window.DDHPush.resync(); } catch (e) {}
   }
+}
+function escapeHtml(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+/* Quran.com translations can carry <sup> footnote markup; drop it, then escape the rest. */
+function plainTranslation(v) {
+  return escapeHtml(String(v || "").replace(/<sup[\s\S]*?<\/sup>/gi, "").replace(/<[^>]*>/g, ""));
 }
 function t(key) { return I18N[state.lang][key]; }
 function nameOf(key) { return I18N[state.lang].names[key] || key; }
@@ -377,7 +391,8 @@ async function fetchCalendar(offsetMonth = 0) {
     year: y,
     month: m,
     method: state.method,
-    school: state.school
+    school: state.school,
+    tz: state.place.tz
   });
   if (offsetMonth === 0) {
     apiMeta = payload;
@@ -385,21 +400,21 @@ async function fetchCalendar(offsetMonth = 0) {
   }
   return payload.days;
 }
+let refreshToken = 0;
 async function refresh() {
+  const token = ++refreshToken;
   document.getElementById("nextName").textContent = t("loading");
   try {
-    calendar = await fetchCalendar(0);
+    let cal = await fetchCalendar(0);
     const now = zoneParts(state.place.tz);
-    if (now.d === calendar.length) calendar = calendar.concat((await fetchCalendar(1)).slice(0, 1));
-    try {
-      const q = await PrayerAPI.qibla(state.place.lat, state.place.lon);
-      if (typeof q.direction === "number") qiblaDirection = q.direction;
-    } catch { qiblaDirection = null; }
+    if (now.d === cal.length) cal = cal.concat((await fetchCalendar(1)).slice(0, 1));
+    if (token !== refreshToken) return; // a newer refresh (place/method change) superseded this one
+    calendar = cal;
     renderTimes();
     renderMonth();
     renderQibla();
   } catch {
-    toast(t("loadFail"));
+    if (token === refreshToken) toast(t("loadFail"));
   }
 }
 function todayEntry() {
@@ -447,12 +462,13 @@ function renderTimes() {
     }
     return `<article class="vakt ${k === nextKey ? "on" : ""}">${check}<div class="nm">${nameOf(k)}</div><div class="tm">${tm}</div><div class="st">${passed ? t("passed") : ""}</div></article>`;
   }).join("");
-  renderRamadanHub(entry);
-  // Adhan at prayer time: when a prayer moment arrives, play the full adhan once
-  if (state.adhanAtTime && next) {
-    const adhanKey = `${g.year}-${g.month}-${g.day}-${nextKey}`;
-    const secsLeft = (next.min - nowMin) * 60;
-    if (secsLeft <= 2 && secsLeft > -2 && adhanPlayedKey !== adhanKey) {
+  try { renderRamadanHub(entry); } catch (e) { /* never let the hub stop adhan/alerts below */ }
+  // Adhan at prayer time: play the full adhan once, within a minute after the prayer
+  // time begins (tolerates background-tab timer throttling).
+  if (state.adhanAtTime && prev) {
+    const adhanKey = `${g.date}-${prev.key}`;
+    const sinceSecs = (nowMin - prev.min) * 60;
+    if (sinceSecs >= 0 && sinceSecs < 60 && adhanPlayedKey !== adhanKey) {
       adhanPlayedKey = adhanKey;
       try { const a = new Audio("/audio/adhan-prayer-call.mp3"); a.play().catch(() => {}); } catch {}
     }
@@ -464,9 +480,18 @@ function renderTimes() {
       notifiedKey = key;
       playAlert();
       const title = rm === 0 ? `${nameOf(nextKey)} ${t("timeNow")}` : `${nameOf(nextKey)} — ${t("inMinutes").replace("{n}", rm)}`;
-      try { new Notification(title); } catch {}
+      showLocalNotification(title);
     }
   }
+}
+function showLocalNotification(title) {
+  const fallback = () => { try { new Notification(title); } catch {} };
+  if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+    // Android Chrome forbids `new Notification()`; go through the service worker.
+    navigator.serviceWorker.ready
+      .then(reg => reg.showNotification(title, { icon: "/icon-192.png", badge: "/icon-192.png", tag: "ddh-local" }))
+      .catch(fallback);
+  } else fallback();
 }
 function kaabaKm(lat, lon) {
   const R = 6371;
@@ -496,7 +521,7 @@ function renderHijriCal() {
   if (!h0) { if (heading) heading.textContent = t("hijriCal"); return; }
   const hy = +h0.year, hm = +h0.month.number;
   if (heading) heading.textContent = `${hijriName(hm)} ${hy}`;
-  if (note) note.textContent = "";
+  if (note) note.textContent = t("hijriNote");
   // find Gregorian date of Hijri day 1 by scanning back
   const d = new Date(now);
   for (let i = 0; i < 32; i++) {
@@ -636,7 +661,7 @@ function buildCompassDial() {
 function renderQibla() {
   const local = qiblaBearing(state.place.lat, state.place.lon);
   const atKaaba = Math.abs(state.place.lat - 21.4225) < 0.05 && Math.abs(state.place.lon - 39.8262) < 0.05;
-  const b = atKaaba ? 0 : (typeof qiblaDirection === "number" ? qiblaDirection : local);
+  const b = atKaaba ? 0 : local;
   document.getElementById("qiblaDeg").textContent = atKaaba ? (state.lang === "tr" ? "Kâbe" : "Kaaba") : `${b.toFixed(1)}°`;
   const qn = document.getElementById("qiblaNeedle");
   if (qn) qn.setAttribute("transform", `rotate(${b} 110 110)`);
@@ -652,10 +677,9 @@ function renderQibla() {
     if (frame.dataset.place !== src) { frame.dataset.place = src; frame.src = src; }
     if (open) open.href = `/qibla?lat=${state.place.lat}&lon=${state.place.lon}&name=${encodeURIComponent(state.place.name)}`;
   }
-  const agree = atKaaba || Math.abs(((qiblaDirection ?? local) - local + 540) % 360 - 180) < 0.2;
   document.getElementById("qiblaCheck").textContent = atKaaba
     ? (state.lang === "tr" ? "Kâbe’desiniz." : "You are at the Kaaba.")
-    : `${b.toFixed(1)}° · ${agree ? (state.lang === "tr" ? "hesap Aladhan ile aynı" : "matches Aladhan") : (state.lang === "tr" ? "Aladhan açısından fark var" : "differs from Aladhan")}`;
+    : `${b.toFixed(1)}° · ${state.lang === "tr" ? "gerçek kuzeye göre" : "from true north"}`;
   const km = kaabaKm(state.place.lat, state.place.lon);
   document.getElementById("qiblaDistance").textContent = atKaaba ? "" : `${km.toFixed(0)} km · ${state.lang === "tr" ? "Kâbe mesafesi" : "to the Kaaba"}`;
   if (heading == null) { document.getElementById("qiblaTurn").textContent = t("toward"); qiblaWasAligned = false; }
@@ -781,7 +805,7 @@ async function nearbySearch(kind) {
   if (!items.length) { list.innerHTML = `<p class="hint">${t(noneKey)}</p>`; return; }
   list.innerHTML = items.map(m =>
     `<a class="mosque" href="https://www.google.com/maps/search/?api=1&query=${m.lat},${m.lon}" target="_blank" rel="noopener">` +
-    `<span class="mq-name">${icon} ${m.name}</span><span class="mq-d">${m.d < 1 ? Math.round(m.d * 1000) + " m" : m.d.toFixed(1) + " km"}</span></a>`
+    `<span class="mq-name">${icon} ${escapeHtml(m.name)}</span><span class="mq-d">${m.d < 1 ? Math.round(m.d * 1000) + " m" : m.d.toFixed(1) + " km"}</span></a>`
   ).join("");
 }
 async function findMosques() { return nearbySearch("mosque"); }
@@ -800,7 +824,8 @@ function renderRamadanHub(entry) {
     hub.className = "ramadan-hub";
     document.getElementById("vaktGrid").after(hub);
   }
-  const nowMin = minutes(new Date());
+  const zp = zoneParts(state.place.tz || "UTC");
+  const nowMin = zp.hh * 60 + zp.mm;
   const fajr = minutes(entry.timings.Fajr), maghrib = minutes(entry.timings.Maghrib);
   let label, target;
   if (nowMin < fajr) { label = t("suhoorIn"); target = fajr; }
@@ -818,33 +843,49 @@ function showTab(id) {
 }
 
 async function loadChapters() {
-  const res = await fetch(`https://api.quran.com/api/v4/chapters?language=${state.lang === "tr" ? "tr" : "en"}`);
-  const json = await res.json();
-  chapters = json.chapters || [];
+  try {
+    const res = await fetch(`https://api.quran.com/api/v4/chapters?language=${state.lang === "tr" ? "tr" : "en"}`);
+    if (!res.ok) throw new Error("chapters " + res.status);
+    const json = await res.json();
+    chapters = json.chapters || [];
+  } catch {
+    toast(t("loadFail"));
+    document.getElementById("chapterList").innerHTML = `<p class="hint">${t("loadFail")}</p>`;
+    return;
+  }
   renderChapters();
   if (!document.getElementById("verses").childElementCount) openChapter(1);
 }
 function renderChapters() {
   const q = (document.getElementById("surahSearch").value || "").toLowerCase();
   document.getElementById("chapterList").innerHTML = chapters.filter(c => `${c.id} ${c.name_simple} ${c.name_arabic} ${c.translated_name?.name || ""}`.toLowerCase().includes(q)).map(c =>
-    `<button type="button" data-id="${c.id}"><b>${c.id}. ${c.name_simple}</b><small>${c.name_arabic} · ${c.translated_name?.name || ""} · ${c.verses_count}</small></button>`
+    `<button type="button" data-id="${c.id}"><b>${c.id}. ${escapeHtml(c.name_simple)}</b><small>${escapeHtml(c.name_arabic)} · ${escapeHtml(c.translated_name?.name || "")} · ${c.verses_count}</small></button>`
   ).join("");
   document.querySelectorAll("#chapterList button").forEach(btn => btn.onclick = () => openChapter(+btn.dataset.id));
 }
+let chapterToken = 0;
 async function openChapter(id, keepAudio = false) {
   currentChapter = id;
+  const token = ++chapterToken;
   const chapter = chapters.find(c => c.id === id);
   document.getElementById("surahTitle").textContent = chapter ? chapter.name_simple : `Surah ${id}`;
   const verses = document.getElementById("verses");
   const previousHeight = verses.scrollTop;
   verses.innerHTML = `<p class="hint">${t("loading")}</p>`;
   const translation = state.lang === "tr" ? 77 : 20;
-  const [uthmani, meal] = await Promise.all([
-    fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${id}`).then(r => r.json()),
-    fetch(`https://api.quran.com/api/v4/quran/translations/${translation}?chapter_number=${id}`).then(r => r.json())
-  ]);
+  let uthmani, meal;
+  try {
+    [uthmani, meal] = await Promise.all([
+      fetch(`https://api.quran.com/api/v4/quran/verses/uthmani?chapter_number=${id}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+      fetch(`https://api.quran.com/api/v4/quran/translations/${translation}?chapter_number=${id}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    ]);
+  } catch {
+    if (token === chapterToken) verses.innerHTML = `<p class="hint">${t("loadFail")}</p>`;
+    return;
+  }
+  if (token !== chapterToken) return; // user already opened another surah
   verses.innerHTML = (uthmani.verses || []).map((v, i) =>
-    `<article class="verse"><div class="kicker">${v.verse_key}</div><div class="ar">${v.text_uthmani}</div><div class="tr">${meal.translations?.[i]?.text || ""}</div></article>`
+    `<article class="verse"><div class="kicker">${escapeHtml(v.verse_key)}</div><div class="ar">${escapeHtml(v.text_uthmani)}</div><div class="tr">${plainTranslation(meal.translations?.[i]?.text)}</div></article>`
   ).join("");
   verses.scrollTop = previousHeight;
   if (!keepAudio) document.getElementById("audio").removeAttribute("src");
@@ -930,7 +971,7 @@ async function searchCities(q) {
   const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=${state.lang}`);
   const results = (await res.json()).results || [];
   if (!results.length) { list.innerHTML = `<li><button type="button" disabled>${t("noResults")}</button></li>`; return; }
-  list.innerHTML = results.map((r, i) => `<li><button type="button" data-i="${i}">${r.name}<small>${[r.admin1, r.country].filter(Boolean).join(" · ")}</small></button></li>`).join("");
+  list.innerHTML = results.map((r, i) => `<li><button type="button" data-i="${i}">${escapeHtml(r.name)}<small>${escapeHtml([r.admin1, r.country].filter(Boolean).join(" · "))}</small></button></li>`).join("");
   list.querySelectorAll("button[data-i]").forEach(btn => btn.onclick = () => choosePlace(results[+btn.dataset.i]));
 }
 function choosePlace(r) {

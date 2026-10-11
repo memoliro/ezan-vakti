@@ -9,7 +9,8 @@
   <link rel="alternate" hreflang="en" href="https://dailydeenhub.com/privacy.html" />
   <link rel="alternate" hreflang="tr" href="https://dailydeenhub.com/tr/privacy.html" />
   <link rel="icon" href="/favicon.png" />
-  <link rel="stylesheet" href="/styles.css?v=5" />
+  <link rel="stylesheet" href="/fonts.css?v=1" />
+  <link rel="stylesheet" href="/styles.css?v=21" />
 </head>
 <body>
   <header class="top"><div class="wrap top-inner">
@@ -19,12 +20,15 @@
     <h1>Gizlilik</h1>
     <h2>Verileriniz bir emanettir</h2>
     <p>Verileriniz bir emanettir. DailyDeenHub hesap gerektirmez; adınızı, e-postanızı veya telefon numaranızı asla istemez. Reklam yok, takipçi yok, kişisel veri satışı yok.</p>
-    <p><strong>Cihazınızda:</strong> ayarlarınız — dil, tema, konum, hesaplama yöntemi, hatırlatıcı tercihleri, namaz takipçisi ve tesbih sayacı — tarayıcınızın yerel deposunda saklanır. Cihazınızdan asla çıkmaz.</p>
-    <p><strong>Namaz vakitleri cihazınızda hesaplanır:</strong> namaz vakitleri servisine ulaşılamadığında, DailyDeenHub namaz vakitlerini ve hicri tarihi doğrudan cihazınızda hesaplar. Koordinatlarınız hiçbir yere gönderilmez.</p>
-    <p><strong>Konum:</strong> yalnızca namaz vakitlerini ve kıble yönünü hesaplamak için kullanılır. "Konumumu kullan" veya "Yakınımdaki camileri bul"u seçerseniz koordinatlarınız cihazınızda işlenir.</p>
+    <p><strong>Cihazınızda:</strong> ayarlarınız — dil, tema, konum, hesaplama yöntemi, hatırlatıcı tercihleri, namaz takipçisi ve tesbih sayacı — tarayıcınızın yerel deposunda saklanır. Cihazınızda kalır ve bize gönderilmez. Tek istisna isteğe bağlı Namaz uyarıları özelliğidir (aşağıya bakın).</p>
+    <p><strong>Namaz vakitleri cihazınızda hesaplanır:</strong> namaz vakitleri servisine ulaşılamadığında, DailyDeenHub namaz vakitlerini ve hicri tarihi doğrudan cihazınızda, seçtiğiniz konum ve saat dilimini kullanarak hesaplar.</p>
+    <p><strong>Konum:</strong> yalnızca namaz vakitlerini ve kıble yönünü hesaplamak için kullanılır. Kıble açısı cihazınızda hesaplanır. Bir yer seçtiğinizde, "Konumumu kullan"ı veya "Yakında bul"u kullandığınızda aşağıdaki servisler cevap verebilmek için gereken koordinatları alır.</p>
     <p><strong>Üçüncü taraf servisler (yalnızca özelliği kullandığınızda):</strong></p>
     <ul>
       <li><strong>Namaz vakitleri (Aladhan):</strong> çevrimiçiyken namaz vakitleri koordinatlarınız için api.aladhan.com adresinden alınır.</li>
+      <li><strong>Şehir arama (Open-Meteo):</strong> şehir aradığınızda veya "Konumumu kullan"ı seçtiğinizde, arama metniniz veya koordinatlarınız yer adını ve saat dilimini bulmak için Open-Meteo geocoding API'ye gönderilir.</li>
+      <li><strong>Kıble haritası (OpenFreeMap):</strong> harita sayfası tiles.openfreemap.org adresinden harita karoları yükler; bu servis IP adresinizi ve baktığınız bölgeyi görebilir. Harita kütüphanesi ve yazı tipleri bizim tarafımızdan barındırılır.</li>
+      <li><strong>Ses (Kur'an radyosu ve tilavetler):</strong> ses, qurango.net ve quranicaudio.com üzerinden akar; dinlerken bu servisler IP adresinizi görebilir.</li>
       <li><strong>Yakında bul (OpenStreetMap):</strong> cami veya helal restoran aradığınızda, yakındaki yerleri bulmak için koordinatlarınız OpenStreetMap Overpass API'ye gönderilir. Saklanmaz.</li>
       <li><strong>Kur'an (Quran.com):</strong> Kur'an okuyucuyu açtığınızda ayetler api.quran.com adresinden alınır. Kişisel veri gönderilmez.</li>
     </ul>

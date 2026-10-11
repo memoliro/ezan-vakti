@@ -13,9 +13,8 @@
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Fraunces:opsz,wght@9..144,520;9..144,640&family=Outfit:wght@340;420;520;600&display=swap" rel="stylesheet" />
+  <link rel="preload" href="/fonts/outfit-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/fonts.css?v=1" />
   <link rel="stylesheet" href="/styles.css?v=21" />
 </head>
 <body>
@@ -41,7 +40,7 @@
       <button class="menu-link" type="button" data-soon data-i="menuResources">Resources</button>
       <button class="menu-link" type="button" data-soon data-i="menuArticles">Articles</button>
       <button class="menu-link" type="button" data-soon data-i="menuCommunity">Community</button>
-      <button class="menu-link" type="button" data-soon data-i="menuAbout">About</button>
+      <a class="menu-link" href="/tr/about.html" data-i="menuAbout">About</a>
       <div class="menu-div"></div>
       <div class="menu-row"><span data-i="menuLanguage">Language</span>
         <span class="seg sm"><button type="button" id="mLangEn" class="on">EN</button><button type="button" id="mLangTr">TR</button></span>
@@ -261,10 +260,10 @@
     </div>
   </div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/prayer-calc.js?v=2"></script>
-  <script src="/prayer-api.js?v=5"></script>
+  <script src="/prayer-calc.js?v=3"></script>
+  <script src="/prayer-api.js?v=6"></script>
   <script src="/push-alerts.js?v=4"></script>
-  <script src="/app.js?v=31"></script>
+  <script src="/app.js?v=32"></script>
 
   <div class="modal hidden" id="installPopup" style="z-index:60">
     <div class="sheet">
