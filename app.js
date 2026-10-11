@@ -662,8 +662,9 @@ function buildCompassDial() {
 }
 
 function renderQibla() {
-  const local = qiblaBearing(state.place.lat, state.place.lon);
-  const atKaaba = Math.abs(state.place.lat - 21.4225) < 0.05 && Math.abs(state.place.lon - 39.8262) < 0.05;
+  const qp = qiblaPlace();
+  const local = qiblaBearing(qp.lat, qp.lon);
+  const atKaaba = Math.abs(qp.lat - 21.4225) < 0.05 && Math.abs(qp.lon - 39.8262) < 0.05;
   const b = atKaaba ? 0 : local;
   document.getElementById("qiblaDeg").textContent = atKaaba ? (state.lang === "tr" ? "Kâbe" : "Kaaba") : `${b.toFixed(1)}°`;
   const qn = document.getElementById("qiblaNeedle");
@@ -676,15 +677,24 @@ function renderQibla() {
   const frame = document.getElementById("qiblaFrame");
   const open = document.getElementById("qiblaOpen");
   if (frame) {
-    const src = `/qibla?embed=1&lat=${state.place.lat}&lon=${state.place.lon}&name=${encodeURIComponent(state.place.name)}`;
+    const src = `/qibla?embed=1&lat=${qp.lat}&lon=${qp.lon}&name=${encodeURIComponent(qp.name)}`;
     if (frame.dataset.place !== src) { frame.dataset.place = src; frame.src = src; }
-    if (open) open.href = `/qibla?lat=${state.place.lat}&lon=${state.place.lon}&name=${encodeURIComponent(state.place.name)}`;
+    if (open) open.href = `/qibla?lat=${qp.lat}&lon=${qp.lon}&name=${encodeURIComponent(qp.name)}`;
   }
   document.getElementById("qiblaCheck").textContent = atKaaba
     ? (state.lang === "tr" ? "Kâbe’desiniz." : "You are at the Kaaba.")
     : `${b.toFixed(1)}° · ${state.lang === "tr" ? "gerçek kuzeye göre" : "from true north"}`;
-  const km = kaabaKm(state.place.lat, state.place.lon);
+  const km = kaabaKm(qp.lat, qp.lon);
   document.getElementById("qiblaDistance").textContent = atKaaba ? "" : `${km.toFixed(0)} km · ${state.lang === "tr" ? "Kâbe mesafesi" : "to the Kaaba"}`;
+  // Warn when the compass uses GPS because the manual location is a test location.
+  const qloc = document.getElementById("qiblaLocNote");
+  if (qloc) {
+    qloc.textContent = qiblaLoc
+      ? (state.lang === "tr"
+          ? `Pusula GPS konumunuzu kullanıyor (manuel konum: ${state.place.name}).`
+          : `Compass is using your GPS location (manual location: ${state.place.name}).`)
+      : "";
+  }
   if (heading == null) { document.getElementById("qiblaTurn").textContent = t("toward"); qiblaWasAligned = false; }
   else {
     const diff = ((b - heading + 540) % 360) - 180;
@@ -1096,6 +1106,10 @@ document.querySelectorAll("[data-goto]").forEach(a => a.addEventListener("click"
   window.scrollTo({ top: 0, behavior: "smooth" });
 }));
 let compassOn = false, compassTimer = 0;
+// Physical location for the Qibla compass (from GPS). The manual state.place
+// may be a test location (e.g. Mardin) — the compass must use where the phone is.
+let qiblaLoc = null;
+function qiblaPlace() { return qiblaLoc || state.place; }
 document.getElementById("compassBtn").onclick = async () => {
   if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === "function") {
     try { if (await DeviceOrientationEvent.requestPermission() !== "granted") return; }
@@ -1103,6 +1117,20 @@ document.getElementById("compassBtn").onclick = async () => {
   }
   if (compassOn) return; // already listening — don't stack listeners
   compassOn = true;
+  // Use the phone's real GPS position for the compass — the manual state.place
+  // may be a test location. Fall back to state.place if GPS is unavailable.
+  if (navigator.geolocation) {
+    try {
+      const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 8000, maximumAge: 60000 }));
+      const glat = pos.coords.latitude, glon = pos.coords.longitude;
+      // Only use GPS if it meaningfully differs from the manual location (>1km).
+      const dLat = Math.abs(glat - state.place.lat), dLon = Math.abs(glon - state.place.lon);
+      if (dLat > 0.01 || dLon > 0.01) {
+        qiblaLoc = { name: state.lang === "tr" ? "GPS konumu" : "GPS location", lat: glat, lon: glon };
+        updateDeclination(glat, glon); // declination must match the physical location too
+      }
+    } catch (e) {}
+  }
   let lastAbsMs = 0; // last time the absolute sensor fired
   const smooth = (prev, next) => {
     if (prev == null) return next;
