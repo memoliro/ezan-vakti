@@ -194,6 +194,9 @@ const COMPASS = { en: ["N", "E", "S", "W"], tr: ["K", "D", "G", "B"] };
 const HIJRI_TR = ["", "Muharrem", "Safer", "Rebiülevvel", "Rebiülahir", "Cemaziyelevvel", "Cemaziyelahir", "Recep", "Şaban", "Ramazan", "Şevval", "Zilkade", "Zilhicce"];
 
 const state = load();
+// Magnetic declination (degrees, +east/-west) for Android compass true-north correction.
+// iOS webkitCompassHeading already returns true north, so this is Android-only.
+try { const _d = parseFloat(localStorage.getItem('ddh-dec')); if (!isNaN(_d)) state.declination = _d; } catch (e) {}
 let calendar = [];
 let apiMeta = { source: "Aladhan", methodName: "", timezone: "" };
 let qiblaDirection = null;
@@ -977,9 +980,23 @@ async function searchCities(q) {
 function choosePlace(r) {
   state.place = { name: r.name, country: r.country || "", lat: r.latitude, lon: r.longitude, tz: r.timezone || "UTC" };
   save();
+  updateDeclination(r.latitude, r.longitude);
   document.getElementById("locLabel").textContent = r.name;
   document.getElementById("locModal").classList.add("hidden");
   refresh();
+}
+// Fetch magnetic declination (NOAA) so the Android compass can correct
+// magnetic north -> true north. Cached; changes ~0.08°/year.
+async function updateDeclination(lat, lon) {
+  try {
+    const res = await fetch(`https://www.ngdc.noaa.gov/geomag-web/calculators/calculateDeclination?lat1=${lat}&lon1=${lon}&key=zNEw7&resultFormat=json`);
+    const j = await res.json();
+    const dec = j.result && j.result[0] && j.result[0].declination;
+    if (typeof dec === 'number' && !isNaN(dec)) {
+      state.declination = dec;
+      try { localStorage.setItem('ddh-dec', String(dec)); } catch (e) {}
+    }
+  } catch (e) {}
 }
 
 document.getElementById("locBtn").onclick = () => { document.getElementById("locModal").classList.remove("hidden"); document.getElementById("citySearch").focus(); };
@@ -1108,6 +1125,11 @@ document.getElementById("compassBtn").onclick = async () => {
     }
     if (isAbsEvent) lastAbsMs = Date.now();
     next = ((next % 360) + 360) % 360;
+    // Android magnetometer reads magnetic north; correct to true north.
+    // iOS webkitCompassHeading already returns true north — skip it there.
+    if (!iosCompass && typeof state.declination === 'number' && !isNaN(state.declination)) {
+      next = ((next + state.declination + 360) % 360);
+    }
     const h = smooth(heading, next);
     if (h !== heading) { heading = h; renderQibla(); } // render only on real change
   };
@@ -1126,6 +1148,8 @@ applyI18n();
 buildCompassDial();
 refresh();
 maybeShowApkNotice();
+// Fetch magnetic declination for the saved location (cached in localStorage).
+if (state.place && typeof state.place.lat === 'number') updateDeclination(state.place.lat, state.place.lon);
 // prayer-card checkboxes use delegation (cards re-render every second)
 const vg = document.getElementById("vaktGrid");
 if (vg) vg.addEventListener("click", e => {
