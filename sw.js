@@ -28,7 +28,7 @@ self.addEventListener('push', function (event) {
   var data = {};
   try { data = event.data ? event.data.json() : {}; } catch (e) {}
   var title = data.title || 'Prayer time';
-  var body = data.url ? '' : '';
+  var body = data.body || (data.prayer === 'Test' ? 'Push notifications are working!' : 'Tap to open DailyDeenHub');
   var options = {
     body: body,
     icon: '/icon-192.png',
